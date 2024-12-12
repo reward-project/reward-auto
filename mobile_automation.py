@@ -1,5 +1,6 @@
 from appium import webdriver
-from appium.webdriver.common.mobileby import MobileBy
+from appium.options.android import UiAutomator2Options
+from appium.webdriver.common.appiumby import AppiumBy
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -7,18 +8,18 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 class MobileAutomation:
     def __init__(self):
         # Appium 설정
-        self.desired_caps = {
-            'platformName': 'Android',  # 또는 'iOS'
-            'deviceName': '디바이스이름',
-            'automationName': 'UiAutomator2',  # Android의 경우
-            'appPackage': '앱패키지명',
-            'appActivity': '시작액티비티명',
-            'noReset': True
-        }
-        self.driver = webdriver.Remote('http://localhost:4723/wd/hub', self.desired_caps)
+        options = UiAutomator2Options()
+        options.set_capability('platformName', 'Android')
+        options.set_capability('deviceName', '실제_디바이스_이름')
+        options.set_capability('automationName', 'UiAutomator2')
+        options.set_capability('appPackage', 'com.coupang.mobile')
+        options.set_capability('appActivity', 'com.coupang.mobile.MainActivity')
+        options.set_capability('noReset', True)
+        
+        self.driver = webdriver.Remote('http://localhost:4723/wd/hub', options=options)
         self.wait = WebDriverWait(self.driver, 20)
 
-    def safe_click(self, locator, locator_type=MobileBy.ID, timeout=20):
+    def safe_click(self, locator, locator_type=AppiumBy.ID, timeout=20):
         """안전한 클릭 동작을 수행하는 메소드"""
         try:
             element = self.wait.until(
@@ -35,7 +36,7 @@ class MobileAutomation:
         """예상치 못한 팝업을 처리하는 메소드"""
         try:
             # 빈 화면 클릭 (팝업 닫기)
-            self.driver.tap([(500, 500)], 500)  # 화면 중앙 탭
+            self.driver.tap([(500, 500)], 500)  # 화면 중앙 
             
             # 일반적인 닫기 버튼 처리
             close_buttons = [
@@ -46,7 +47,7 @@ class MobileAutomation:
             
             for button in close_buttons:
                 try:
-                    self.driver.find_element(MobileBy.XPATH, button).click()
+                    self.driver.find_element(AppiumBy.XPATH, button).click()
                     return True
                 except NoSuchElementException:
                     continue
@@ -80,7 +81,7 @@ class MobileAutomation:
         try:
             # ID로 찾기
             element = self.wait.until(
-                EC.presence_of_element_located((MobileBy.ID, identifier))
+                EC.presence_of_element_located((AppiumBy.ID, identifier))
             )
             element.click()
             return True
@@ -88,7 +89,7 @@ class MobileAutomation:
             try:
                 # XPATH로 찾기
                 element = self.wait.until(
-                    EC.presence_of_element_located((MobileBy.XPATH, f"//*[@text='{identifier}']"))
+                    EC.presence_of_element_located((AppiumBy.XPATH, f"//*[@text='{identifier}']"))
                 )
                 element.click()
                 return True
