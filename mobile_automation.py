@@ -4,18 +4,27 @@ from appium.webdriver.common.appiumby import AppiumBy
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from webdriver_manager.chrome import ChromeDriverManager
+import os
 
 class MobileAutomation:
     def __init__(self):
+        # ChromeDriver 자동 다운로드
+        chromedriver_path = ChromeDriverManager().install()
+        
         # Appium 설정
         options = UiAutomator2Options()
         options.set_capability('platformName', 'Android')
-        options.set_capability('deviceName', '실제_디바이스_이름')
+        options.set_capability('deviceName', 'emulator-5554')
         options.set_capability('automationName', 'UiAutomator2')
         options.set_capability('appPackage', 'com.coupang.mobile')
-        options.set_capability('appActivity', 'com.coupang.mobile.MainActivity')
+        options.set_capability('appActivity', '.SplashActivity')
         options.set_capability('noReset', True)
+        options.set_capability('chromedriverExecutable', chromedriver_path)
+        options.set_capability('autoWebview', True)
+        options.set_capability('webviewDevtoolsPort', 9222)
         
+        # Appium 서버가 실행 중인지 확인 후 연결
         self.driver = webdriver.Remote('http://localhost:4723/wd/hub', options=options)
         self.wait = WebDriverWait(self.driver, 20)
 
@@ -41,7 +50,7 @@ class MobileAutomation:
             # 일반적인 닫기 버튼 처리
             close_buttons = [
                 '//android.widget.Button[@text="닫기"]',
-                '//android.widget.Button[@text="확인"]',
+                '//android.widget.Button[@text="확��"]',
                 # 더 많은 팝업 패턴 추가
             ]
             
