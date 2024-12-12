@@ -21,12 +21,23 @@ class MobileAutomation:
         options.set_capability('appActivity', '.SplashActivity')
         options.set_capability('noReset', True)
         options.set_capability('chromedriverExecutable', chromedriver_path)
-        options.set_capability('autoWebview', True)
-        options.set_capability('webviewDevtoolsPort', 9222)
         
-        # Appium 서버가 실행 중인지 확인 후 연결
-        self.driver = webdriver.Remote('http://localhost:4723/wd/hub', options=options)
-        self.wait = WebDriverWait(self.driver, 20)
+        # 크롬 디버깅 관련 설정 추가
+        options.set_capability('chromedriverExecutableDir', '/path/to/chromedriver')
+        options.set_capability('ensureWebviewsHavePages', True)
+        options.set_capability('enableWebviewDetailsCollection', True)
+        options.set_capability('showChromedriverLog', True)
+        
+        # 웹뷰 관련 설정은 일단 비활성화
+        # options.set_capability('autoWebview', True)
+        # options.set_capability('webviewDevtoolsPort', 9222)
+        
+        try:
+            self.driver = webdriver.Remote('http://127.0.0.1:4723', options=options)
+            self.wait = WebDriverWait(self.driver, 20)
+        except Exception as e:
+            print(f"Appium 서버 연결 실패: {str(e)}")
+            raise
 
     def safe_click(self, locator, locator_type=AppiumBy.ID, timeout=20):
         """안전한 클릭 동작을 수행하는 메소드"""
@@ -50,7 +61,7 @@ class MobileAutomation:
             # 일반적인 닫기 버튼 처리
             close_buttons = [
                 '//android.widget.Button[@text="닫기"]',
-                '//android.widget.Button[@text="확��"]',
+                '//android.widget.Button[@text="확"]',
                 # 더 많은 팝업 패턴 추가
             ]
             
