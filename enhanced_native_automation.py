@@ -6,6 +6,8 @@ from utils.logger import Logger
 import time
 import traceback
 import os
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 
 class EnhancedCoupangAutomation(MobileAutomation):
     def __init__(self):
@@ -80,7 +82,7 @@ class EnhancedCoupangAutomation(MobileAutomation):
             # 검색 실행
             self.logger.debug("\n[4단계] 검색 실행")
             self.driver.save_screenshot(os.path.join(self.logger.log_dir, 'before_search_click.png'))
-            self.logger.debug("- 클릭 전 스크린샷 저장")
+            self.logger.debug("- ���릭 전 스크린샷 저장")
             
             search_btn.click()
             self.logger.debug("- 검색 버튼 클릭됨")
@@ -110,46 +112,99 @@ class EnhancedCoupangAutomation(MobileAutomation):
                 if not search_input:
                     raise Exception("검색창을 찾을 수 없습니다")
                 
-                # 검색어 입력 및 실행
+                # 검색어 입력 부분 수정
                 self.logger.debug("\n[6단계] 검색 수행")
-                search_input.clear()
-                search_input.send_keys(keyword)
-                self.logger.debug(f"- 검색어 입력: {keyword}")
-                
-                # 검색 실행 - 여러 방법 순차적 시도
-                search_methods = [
-                    {
-                        'name': '검색 버튼',
-                        'action': lambda: self.try_search_button()
-                    },
-                    {
-                        'name': 'IME 검색',
-                        'action': lambda: self.try_ime_search()
-                    },
-                    {
-                        'name': 'Enter 키',
-                        'action': lambda: self.driver.press_keycode(66)
-                    },
-                    {
-                        'name': '키보드 검색 버튼',
-                        'action': lambda: self.try_keyboard_search()
-                    }
-                ]
-                
-                for method in search_methods:
-                    try:
-                        self.logger.debug(f"- {method['name']}으로 검색 시도")
-                        method['action']()
-                        time.sleep(2)  # 검색 시작 대기
+                try:
+                    # 검색창 초기화
+                    search_input.click()
+                    time.sleep(1)
+                    
+                    # 기존 텍스트 완전히 제거
+                    search_input.clear()
+                    time.sleep(0.5)
+                    current_text = search_input.text
+                    if current_text:
+                        self.logger.debug(f"텍스트가 남아있음: {current_text}, 백스페이스로 제거 시도")
+                        for _ in range(len(current_text)):
+                            search_input.send_keys(Keys.BACKSPACE)
+                            time.sleep(0.1)
+                    
+                    # 검색어 입력 전 상태 확인
+                    self.logger.debug("검색창 상태 확인")
+                    self.driver.save_screenshot(os.path.join(self.logger.log_dir, 'before_input.png'))
+                    
+                    # 검색어 한 글자씩 입력하며 확인
+                    self.logger.debug(f"검색어 입력 시작: {keyword}")
+                    for char in keyword:
+                        search_input.send_keys(char)
+                        time.sleep(0.1)
+                        current = search_input.text
+                        self.logger.debug(f"현재 입력된 텍스트: {current}")
                         
-                        # 검색 결과 확인
+                        # 입력 확인
+                        if char not in current:
+                            self.logger.debug(f"문자 '{char}' 입력 실패, 재시도")
+                            search_input.send_keys(char)
+                            time.sleep(0.1)
+                    
+                    # 최종 입력 확인
+                    final_text = search_input.text
+                    self.logger.debug(f"최종 입력된 텍스트: {final_text}")
+                    
+                    if keyword not in final_text:
+                        self.logger.debug("입력 실패, 전체 재입력 시도")
+                        search_input.clear()
+                        time.sleep(0.5)
+                        search_input.send_keys(keyword)
+                        time.sleep(0.5)
+                    
+                    # 검색 실행
+                    try:
+                        # 먼저 키보드 검색 버튼 찾기
+                        keyboard_search_locators = [
+                            (AppiumBy.ID, "com.android.inputmethod.latin:id/key_enter"),
+                            (AppiumBy.ID, "com.google.android.inputmethod.latin:id/key_enter"),
+                            (AppiumBy.XPATH, "//android.widget.Button[@text='검색']"),
+                            (AppiumBy.XPATH, "//android.widget.Button[@text='이동']"),
+                            (AppiumBy.XPATH, "//android.widget.Button[@text='완료']")
+                        ]
+                        
+                        for locator_type, locator_value in keyboard_search_locators:
+                            try:
+                                self.logger.debug(f"키보드 버튼 찾기: {locator_value}")
+                                button = self.driver.find_element(locator_type, locator_value)
+                                button.click()
+                                time.sleep(2)
+                                if self.check_search_result():
+                                    return True
+                            except:
+                                continue
+                        
+                        # 키보드 버튼을 찾지 못한 경우 Enter 키 전송
+                        self.logger.debug("Enter 키 전송 시도")
+                        search_input.send_keys(Keys.ENTER)
+                        time.sleep(2)
+                        
                         if self.check_search_result():
-                            self.logger.info(f"✓ {method['name']}으로 검색 성공")
                             return True
+                            
+                        # 마지막으로 검색 버튼 클릭 시도
+                        self.logger.debug("검색 버튼 클릭 시도")
+                        search_button = self.driver.find_element(AppiumBy.ID, "com.coupang.mobile:id/search_submit")
+                        search_button.click()
+                        time.sleep(2)
+                        
+                        return self.check_search_result()
+                        
                     except Exception as e:
-                        self.logger.debug(f"  → {method['name']} 실패: {str(e)}")
-                
-                return False
+                        self.logger.error(f"검색 실행 중 에러: {str(e)}")
+                        self.logger.debug(f"상세 에러:\n{traceback.format_exc()}")
+                        return False
+                    
+                except Exception as e:
+                    self.logger.error(f"검색어 입력 중 에러: {str(e)}")
+                    self.logger.debug(f"상세 에러:\n{traceback.format_exc()}")
+                    return False
                 
             except Exception as e:
                 self.logger.error(f"✗ 검색창 조작 실패: {str(e)}")
@@ -207,7 +262,7 @@ class EnhancedCoupangAutomation(MobileAutomation):
             # 검색 결과 로딩 대기
             time.sleep(3)
             
-            # 검색 결과 확인 방법들
+            # 검색 결과 확 방법들
             result_locators = [
                 (AppiumBy.ID, "com.coupang.mobile:id/product_list"),
                 (AppiumBy.XPATH, "//android.widget.TextView[contains(@text, '검색결과')]"),
