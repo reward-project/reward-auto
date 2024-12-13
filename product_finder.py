@@ -4,6 +4,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from utils.logger import Logger
 from popup_handler import PopupHandler
 from pagination_handler import PaginationHandler
+from ad_checker import AdChecker
 import time
 
 class CoupangProductFinder:
@@ -13,6 +14,7 @@ class CoupangProductFinder:
         self.logger = Logger('CoupangProductFinder')
         self.popup_handler = PopupHandler(self.driver)
         self.pagination_handler = PaginationHandler(self.driver)
+        self.ad_checker = AdChecker()
         
     def extract_product_id(self, href):
         """URL에서 상품 ID와 itemId 추출"""
@@ -73,66 +75,77 @@ class CoupangProductFinder:
             return False
 
     def find_product_in_current_page(self, productId):
-        """현재 페이지에서 상품 찾기"""
         try:
             max_scroll = 5
             scroll_count = 0
             
             while scroll_count < max_scroll:
-                # 팝업 처리
                 self.popup_handler.close_all_popups()
                 
-                # 현재 페이지의 모든 상품 링크 수집
-                all_links = self.driver.find_elements(By.CSS_SELECTOR, '#productList a[href*="/products/"]')
-                self.logger.info(f"\n=== 현재 페이지 상품 목록 (총 {len(all_links)}개) ===")
+                product_containers = self.driver.find_elements(By.CSS_SELECTOR, '#productList li')
                 
-                # 상품 ID 추출 및 표시
-                found_ids = []
-                for link in all_links:
+                # 현재 페이지의 모든 상품 광고 여부 체크
+                check_result = self.ad_checker.check_page_products(product_containers, productId)
+                
+                # 일반 상품이 발견된 경우 클릭 진행
+                if check_result['target_product']:
                     try:
-                        href = link.get_attribute('href')
-                        product_id, item_id = self.extract_product_id(href)
+                        container = check_result['target_product']
                         
-                        if product_id:
-                            id_info = f"{product_id}"
-                            if item_id:
-                                id_info += f" (itemId: {item_id})"
-                            found_ids.append(id_info)
-                            
-                            # 찾는 상품인 경우
-                            if product_id == productId:
-                                self.logger.info(f"\n=== 찾는 상품 발견! (ID: {productId}, itemId: {item_id}) ===")
-                                self.driver.get(href)
-                                time.sleep(3)
-                                return True
-                                
+                        # 링크 찾기
+                        link = container.find_element(By.CSS_SELECTOR, 'a[href*="/products/"]')
+                        
+                        # 방해되는 요소 제거
+                        self.driver.execute_script("""
+                            var elements = document.getElementsByClassName('service-shortcut-row-toggle');
+                            for(var i=0; i<elements.length; i++) {
+                                elements[i].style.display = 'none';
+                            }
+                        """)
+                        
+                        # 컨테이너의 Y 위치 가져오기
+                        container_location = container.location['y']
+                        
+                        # 컨테이너 위치로 스크롤
+                        self.driver.execute_script(f"window.scrollTo(0, {container_location - 100});")
+                        time.sleep(1)
+                        
+                        # 클릭 가능할 때까지 대기
+                        wait = WebDriverWait(self.driver, 10)
+                        clickable = wait.until(EC.element_to_be_clickable(link))
+                        
+                        # 클릭 실행
+                        clickable.click()
+                        time.sleep(3)
+                        
+                        # 이동 후 URL 확인 및 로깅
+                        final_url = self.driver.current_url
+                        self.logger.info(f"\n=== 상품 상세 페이지 이동 완료 ===")
+                        self.logger.info(f"최종 URL: {final_url}")
+                        
+                        return True
+                        
                     except Exception as e:
-                        continue
+                        self.logger.error(f"상품 클릭 중 에러: {str(e)}")
+                        return False
                 
-                # 발견된 모든 상품 ID 출력
-                self.logger.info("발견된 상품 ID 목록:")
-                self.logger.info("\n".join(found_ids))  # 각 ID를 새 줄에 표시
-                
-                # 스크롤
+                # 스크롤 처리
                 before_height = self.driver.execute_script("return document.documentElement.scrollHeight")
                 self.driver.execute_script("window.scrollTo(0, document.documentElement.scrollHeight);")
                 time.sleep(2)
                 after_height = self.driver.execute_script("return document.documentElement.scrollHeight")
                 
                 if after_height == before_height:
-                    self.logger.debug("더 이상 스크롤할 수 없음")
                     break
                 
                 scroll_count += 1
-                self.logger.debug(f"스크롤 {scroll_count}/{max_scroll}")
             
-            self.logger.warning("상품을 찾지 못함")
             return False
             
         except Exception as e:
-            self.logger.error(f"상품 검색 중 에러: {str(e)}")
+            self.logger.error(f"��품 검색 중 에러: {str(e)}")
             return False
-            
+
     def scroll_down(self):
         """페이지 스크롤"""
         try:
@@ -173,7 +186,7 @@ class CoupangProductFinder:
                 if parts:
                     info['product_id'] = parts[0]
             
-            # 쿼리 파라미터 파싱
+            # 쿼리 파미터 파싱
             if '?' in href:
                 query_string = href.split('?')[1]
                 params = query_string.split('&')
