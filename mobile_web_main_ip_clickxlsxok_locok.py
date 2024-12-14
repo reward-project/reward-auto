@@ -146,9 +146,6 @@ def process_product(keyword, target_product_id, click_count, ad_click_count, sho
 
     total_clicks = click_count + ad_click_count
     
-    detail_success = 0  # 일반 상품 상세 페이지 성공 횟수
-    detail_ad_success = 0  # 광고 상품 상세 페이지 성공 횟수
-    
     for click_num in range(total_clicks):
         print(f"\n--- 클릭 {click_num + 1}/{total_clicks} 시작 ---")
         
@@ -173,12 +170,7 @@ def process_product(keyword, target_product_id, click_count, ad_click_count, sho
                 
                 if product_finder.find_product_by_id(target_product_id, is_ad=is_ad_click):
                     print(f"상품을 찾아 클릭했습니다! (Product ID: {target_product_id})")
-                    # 성공 횟수 증가
-                    if is_ad_click:
-                        detail_ad_success += 1
-                    else:
-                        detail_success += 1
-                    time.sleep(5)
+                    time.sleep(5)  # 페이지 로딩 대기
                 else:
                     print(f"{'광고' if is_ad_click else '일반'} 상품을 찾지 못했습니다.")
             else:
@@ -194,19 +186,14 @@ def process_product(keyword, target_product_id, click_count, ad_click_count, sho
             if not change_ip():
                 print("IP 변경 실패")
 
-    return detail_success, detail_ad_success
-
-def update_excel_result(df, index, result, result_click, result_ad_click, detail_success=0, detail_ad_success=0):
+def update_excel_result(df, index, result, result_click, result_ad_click):
     """엑셀 파일에 결과 업데이트"""
     try:
         df.at[index, 'result'] = result
         df.at[index, 'result_click'] = result_click
         df.at[index, 'result_ad_click'] = result_ad_click
-        df.at[index, 'detail_page'] = detail_success
-        df.at[index, 'detail_ad_page'] = detail_ad_success
         df.to_excel('coupang_click.xlsx', index=False)
         print(f"결과 저장 완료: result={result}, result_click={result_click}, result_ad_click={result_ad_click}")
-        print(f"상세 페이지 성공: 일반={detail_success}, 광고={detail_ad_success}")
         return True
     except Exception as e:
         print(f"결과 저장 중 오류 발생: {str(e)}")
@@ -267,7 +254,7 @@ def select_initial_location_mode():
                 print(f"\n선택된 모드: {selected_mode}")
                 if toggle_location_service(selected_mode):
                     print("\n위치 설정이 완료되었습니다.")
-                    print("1분�� 대기합니다. 대기 중 다음 작업을 선택할 수 있습니다:")
+                    print("1분간 대기합니다. 대기 중 다음 작업을 선택할 수 있습니다:")
                     print("1. 대기 시간 스킵")
                     print("2. 위치 설정 다시하기")
                     print("3. 그대로 대기")
@@ -357,8 +344,8 @@ def main():
                 
             print(f"\n=== 처리 중인 항목 {row['number']} ===")
             try:
-                # 상품 처리 및 결과 받기
-                detail_success, detail_ad_success = process_product(
+                # 상품 처리
+                success = process_product(
                     keyword=str(row['keyword']),
                     target_product_id=str(row['target_product_id']),
                     click_count=int(row['click']),
@@ -368,19 +355,15 @@ def main():
                 )
                 
                 # 결과 저장
-                result = 'ok' if (detail_success > 0 or detail_ad_success > 0) else 'nok'
-                result_click = 'ok' if detail_success > 0 else 'nok'
-                result_ad_click = 'ok' if detail_ad_success > 0 else 'nok'
+                result = 'ok' if success else 'nok'
+                result_click = 'ok' if success else 'nok'
+                result_ad_click = 'ok' if success else 'nok'
                 
-                update_excel_result(
-                    df, index, result, result_click, result_ad_click,
-                    detail_success=detail_success,
-                    detail_ad_success=detail_ad_success
-                )
+                update_excel_result(df, index, result, result_click, result_ad_click)
                 
             except Exception as e:
                 print(f"처리 중 오류 발생: {str(e)}")
-                update_excel_result(df, index, 'nok', 'nok', 'nok', 0, 0)
+                update_excel_result(df, index, 'nok', 'nok', 'nok')
                 continue
             
     except Exception as e:

@@ -6,6 +6,7 @@ from popup_handler import PopupHandler
 from pagination_handler import PaginationHandler
 from ad_checker import AdChecker
 import time
+import random
 
 class CoupangProductFinder:
     def __init__(self, driver):
@@ -40,38 +41,103 @@ class CoupangProductFinder:
         except:
             return None, None
 
-    def find_product_by_id(self, productId):
+    def find_product_by_id(self, target_product_id, is_ad=False):
         """상품 ID로 상품 찾기"""
         try:
-            self.logger.info(f"상품 검색 - ID: {productId}")
+            # target_product_id가 float인 경우 문자열로 변환
+            target_product_id = str(target_product_id).split('.')[0]  # float 부분 제거
+            self.logger.info(f"상품 검색 시작 - ID: {target_product_id} (광고: {is_ad})")
             
             while True:  # 모든 페이지 검색
                 # 팝업 처리
                 self.popup_handler.close_all_popups()
                 
-                # 현재 페이지 정보
-                current_page = self.pagination_handler.get_current_page()
-                total_count = self.pagination_handler.get_total_count()
-                self.logger.info(f"현재 페이지: {current_page} (전체 상품 수: {total_count})")
-                
                 # 현재 페이지에서 상품 찾기
-                if self.find_product_in_current_page(productId):
-                    return True
+                product_containers = self.driver.find_elements(By.CSS_SELECTOR, '#productList li')
+                self.logger.info(f"현재 페이지 상품 수: {len(product_containers)}")
                 
-                # 다음 페이지가 있으면 이동, 없으면 종료
+                # 광고/일반 상품 구분 처리
+                for container in product_containers:
+                    try:
+                        # 링크 찾기
+                        links = container.find_elements(By.CSS_SELECTOR, 'a[href*="/products/"]')
+                        for link in links:
+                            product_url = link.get_attribute('href')
+                            self.logger.info(f"검사 중인 상품 URL: {product_url}")
+                            
+                            # 광고 여부 확인
+                            is_ad_product = 'search-product-ad' in container.get_attribute('class')
+                            self.logger.info(f"광고 상품 여부: {is_ad_product}")
+                            
+                            # 타겟 상품 ID가 URL에 포함되어 있고, 광고 여부가 일치하는 경우
+                            if target_product_id in product_url and is_ad == is_ad_product:
+                                self.logger.info(f"목표 상품 발견! URL: {product_url}")
+                                
+                                try:
+                                    # 방해되는 요소 제거
+                                    self.driver.execute_script("""
+                                        var elements = document.getElementsByClassName('service-shortcut-row-toggle');
+                                        for(var i=0; i<elements.length; i++) {
+                                            elements[i].style.display = 'none';
+                                        }
+                                    """)
+                                    
+                                    # 스크롤 위치 조정
+                                    self.driver.execute_script("window.scrollBy(0, -150);")  # 약간 위로 스크롤
+                                    time.sleep(1)
+                                    
+                                    # 클릭 시도 1: 직접 클릭
+                                    try:
+                                        self.logger.info("직접 클릭 시도...")
+                                        link.click()
+                                        self.logger.info("직접 클릭 성공!")
+                                        time.sleep(3)
+                                        # 상세 페이지 확인 및 스크롤
+                                        if self.check_detail_page(target_product_id):
+                                            return True
+                                        return False
+                                    except Exception as click_error:
+                                        self.logger.info(f"직접 클릭 실패: {str(click_error)}")
+                                        
+                                        # 클릭 시도 2: JavaScript 클릭
+                                        try:
+                                            self.logger.info("JavaScript 클릭 시도...")
+                                            self.driver.execute_script("arguments[0].click();", link)
+                                            self.logger.info("JavaScript 클릭 성공!")
+                                            time.sleep(3)
+                                            # 상세 페이지 확인 및 스크롤
+                                            if self.check_detail_page(target_product_id):
+                                                return True
+                                            return False
+                                        except Exception as js_error:
+                                            self.logger.error(f"JavaScript 클릭 실패: {str(js_error)}")
+                                            continue
+                                    
+                                except Exception as e:
+                                    self.logger.error(f"상품 클릭 처리 중 오류: {str(e)}")
+                                    continue
+                                
+                    except Exception as e:
+                        self.logger.error(f"상품 컨테이너 처리 중 오류: {str(e)}")
+                        continue
+                
+                # 다음 페이지 확인
                 if not self.pagination_handler.has_next_page():
-                    self.logger.warning("마지막 페이지까지 검색 완료")
+                    self.logger.info("마지막 페이지 도달")
                     break
                     
+                # 다음 페이지로 이동
                 if not self.pagination_handler.go_to_next_page():
                     self.logger.error("페이지 이동 실패")
                     break
+                
+                time.sleep(2)
             
-            self.logger.warning("상품을 찾지 못함")
+            self.logger.warning("상품을 찾지 못했습니다.")
             return False
             
         except Exception as e:
-            self.logger.error(f"상품 검색 중 에러: {str(e)}")
+            self.logger.error(f"상품 검색 중 오류: {str(e)}")
             return False
 
     def find_product_in_current_page(self, productId):
@@ -143,7 +209,7 @@ class CoupangProductFinder:
             return False
             
         except Exception as e:
-            self.logger.error(f"��품 검색 중 에러: {str(e)}")
+            self.logger.error(f"품 검색 중 에러: {str(e)}")
             return False
 
     def scroll_down(self):
@@ -209,3 +275,86 @@ class CoupangProductFinder:
             return info
         except:
             return None 
+
+    def check_detail_page(self, target_product_id):
+        """상품 상세 페이지 확인"""
+        try:
+            time.sleep(3)  # 페이지 로딩 대기
+            
+            # 현재 URL에서 상품 ID 확인
+            current_url = self.driver.current_url
+            self.logger.info(f"상세 페이지 URL: {current_url}")
+            
+            # 상품 ID 확인
+            if target_product_id in current_url:
+                # 자연스러운 스크롤 동작 수행
+                try:
+                    # 전체 페이지 높이 확인
+                    total_height = self.driver.execute_script("return document.body.scrollHeight")
+                    window_height = self.driver.execute_script("return window.innerHeight")
+                    scroll_positions = []
+                    
+                    # 스크롤 위치 계산
+                    current_position = 0
+                    while current_position < total_height:
+                        scroll_amount = random.randint(200, 400)
+                        current_position += scroll_amount
+                        scroll_positions.append(min(current_position, total_height))
+                    
+                    # 자연스러운 스크롤 수행
+                    for position in scroll_positions:
+                        self.driver.execute_script(f"window.scrollTo({{top: {position}, behavior: 'smooth'}})")
+                        time.sleep(random.uniform(0.5, 1.5))
+                    
+                    # 리뷰 또는 상품평 섹션 찾기
+                    review_found = False
+                    review_selectors = [
+                        'div.sdp-review__article',  # 리뷰
+                        'div.product-review',       # 상품평
+                        'div.js_reviewArticleContainer', # 상품평 컨테이너
+                        '#btfTab > ul.product-tab-list > li.product-review-tab' # 상품평 탭
+                    ]
+                    
+                    for selector in review_selectors:
+                        try:
+                            review_element = self.driver.find_element(By.CSS_SELECTOR, selector)
+                            self.logger.info(f"리뷰/상품평 섹션 발견: {selector}")
+                            
+                            # 해당 섹션으로 스크롤
+                            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", review_element)
+                            time.sleep(random.uniform(1, 2))
+                            
+                            # 상품평 탭인 경우 클릭
+                            if 'product-review-tab' in selector:
+                                review_element.click()
+                                time.sleep(random.uniform(1, 2))
+                            
+                            review_found = True
+                            break
+                        except:
+                            continue
+                    
+                    if not review_found:
+                        self.logger.info("리뷰/상품평 섹션 없음")
+                    
+                    # 가끔 위로 살짝 스크롤
+                    if random.random() < 0.3:
+                        up_scroll = random.randint(100, 300)
+                        self.driver.execute_script(f"window.scrollBy({{top: -{up_scroll}, behavior: 'smooth'}})")
+                        time.sleep(random.uniform(0.5, 1))
+                    
+                    # 상세 페이지 체류 시간
+                    time.sleep(random.uniform(3, 5))
+                    
+                    return True
+                    
+                except Exception as scroll_error:
+                    self.logger.error(f"스크롤 중 오류: {str(scroll_error)}")
+                    return True  # 스크롤 실패해도 상품 ID가 일치하면 성공으로 간주
+            
+            self.logger.warning("상세 페이지 확인 실패")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"상세 페이지 확인 중 오류: {str(e)}")
+            return False
