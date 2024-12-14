@@ -7,6 +7,7 @@ from pagination_handler import PaginationHandler
 from ad_checker import AdChecker
 import time
 import random
+import pandas as pd
 
 class CoupangProductFinder:
     def __init__(self, driver):
@@ -44,6 +45,15 @@ class CoupangProductFinder:
     def find_product_by_id(self, target_product_id, is_ad=False):
         """상품 ID로 상품 찾기"""
         try:
+            # 스크롤 속도 설정 읽기
+            try:
+                df = pd.read_excel('coupang_click.xlsx')
+                scroll_speed = str(df[df['number'] == 0]['scroll'].iloc[0]).strip().upper()
+            except:
+                scroll_speed = 'M'  # 기본값
+            
+            self.logger.info(f"스크롤 속도 설정: {'사람 속도(H)' if scroll_speed == 'H' else '기본 속도(M)'}")
+            
             # target_product_id가 float인 경우 문자열로 변환
             target_product_id = str(target_product_id).split('.')[0]  # float 부분 제거
             self.logger.info(f"상품 검색 시작 - ID: {target_product_id} (광고: {is_ad})")
@@ -55,6 +65,26 @@ class CoupangProductFinder:
                 # 현재 페이지에서 상품 찾기
                 product_containers = self.driver.find_elements(By.CSS_SELECTOR, '#productList li')
                 self.logger.info(f"현재 페이지 상품 수: {len(product_containers)}")
+                
+                # 스크롤 처리
+                total_height = self.driver.execute_script("return document.body.scrollHeight")
+                current_position = 0
+                
+                while current_position < total_height:
+                    if scroll_speed == 'H':  # 사람 속도
+                        scroll_amount = random.randint(100, 300)
+                        current_position += scroll_amount
+                        self.driver.execute_script(f"window.scrollTo({{top: {current_position}, behavior: 'smooth'}})")
+                        time.sleep(random.uniform(0.8, 2.0))
+                        
+                        # 가끔 잠깐 멈춤 (20% 확률)
+                        if random.random() < 0.2:
+                            time.sleep(random.uniform(0.5, 1.5))
+                    else:  # 기본 속도
+                        scroll_amount = random.randint(300, 500)
+                        current_position += scroll_amount
+                        self.driver.execute_script(f"window.scrollTo(0, {current_position})")
+                        time.sleep(random.uniform(0.3, 0.7))
                 
                 # 광고/일반 상품 구분 처리
                 for container in product_containers:
@@ -82,41 +112,51 @@ class CoupangProductFinder:
                                         }
                                     """)
                                     
-                                    # 스크롤 위치 조정
-                                    self.driver.execute_script("window.scrollBy(0, -150);")  # 약간 위로 스크롤
-                                    time.sleep(1)
-                                    
-                                    # 클릭 시도 1: 직접 클릭
+                                    # 상품 위치로 스크롤
                                     try:
-                                        self.logger.info("직접 클릭 시도...")
-                                        link.click()
-                                        self.logger.info("직접 클릭 성공!")
-                                        time.sleep(3)
-                                        # 상세 페이지 확인 및 스크롤
-                                        if self.check_detail_page(target_product_id):
-                                            return True
-                                        return False
-                                    except Exception as click_error:
-                                        self.logger.info(f"직접 클릭 실패: {str(click_error)}")
+                                        container_location = container.location['y']
+                                        viewport_height = self.driver.execute_script("return window.innerHeight")
+                                        scroll_to = max(0, container_location - (viewport_height / 3))
                                         
-                                        # 클릭 시도 2: JavaScript 클릭
-                                        try:
-                                            self.logger.info("JavaScript 클릭 시도...")
-                                            self.driver.execute_script("arguments[0].click();", link)
-                                            self.logger.info("JavaScript 클릭 성공!")
-                                            time.sleep(3)
-                                            # 상세 페이지 확인 및 스크롤
-                                            if self.check_detail_page(target_product_id):
-                                                return True
-                                            return False
-                                        except Exception as js_error:
-                                            self.logger.error(f"JavaScript 클릭 실패: {str(js_error)}")
-                                            continue
+                                        if scroll_speed == 'H':
+                                            # 사람 속도: 천천히 스크롤
+                                            current_pos = self.driver.execute_script("return window.pageYOffset")
+                                            steps = 10  # 10단계로 나누어 스크롤
+                                            for i in range(steps + 1):
+                                                pos = current_pos + ((scroll_to - current_pos) * (i / steps))
+                                                self.driver.execute_script(f"window.scrollTo(0, {pos})")
+                                                time.sleep(random.uniform(0.1, 0.3))
+                                        else:
+                                            # 기본 속도
+                                            self.driver.execute_script(f"window.scrollTo(0, {scroll_to})")
+                                            time.sleep(0.5)
+                                            
+                                    except Exception as scroll_error:
+                                        self.logger.error(f"스크롤 오류: {scroll_error}")
+                                    
+                                    # 클릭 전 대기
+                                    if scroll_speed == 'H':
+                                        time.sleep(random.uniform(1.0, 2.0))
+                                    else:
+                                        time.sleep(0.5)
+                                    
+                                    # 클릭 시도
+                                    try:
+                                        wait = WebDriverWait(self.driver, 10)
+                                        clickable = wait.until(EC.element_to_be_clickable(link))
+                                        clickable.click()
+                                    except:
+                                        self.driver.execute_script("arguments[0].click();", link)
+                                    
+                                    time.sleep(2)
+                                    if self.check_detail_page(target_product_id):
+                                        return True
+                                    return False
                                     
                                 except Exception as e:
                                     self.logger.error(f"상품 클릭 처리 중 오류: {str(e)}")
                                     continue
-                                
+                                    
                     except Exception as e:
                         self.logger.error(f"상품 컨테이너 처리 중 오류: {str(e)}")
                         continue
@@ -279,6 +319,13 @@ class CoupangProductFinder:
     def check_detail_page(self, target_product_id):
         """상품 상세 페이지 확인"""
         try:
+            # 스크롤 속도 설정 읽기
+            try:
+                df = pd.read_excel('coupang_click.xlsx')
+                scroll_speed = str(df[df['number'] == 0]['scroll'].iloc[0]).strip().upper()
+            except:
+                scroll_speed = 'M'  # 기본값
+            
             time.sleep(3)  # 페이지 로딩 대기
             
             # 현재 URL에서 상품 ID 확인
@@ -287,7 +334,6 @@ class CoupangProductFinder:
             
             # 상품 ID 확인
             if target_product_id in current_url:
-                # 자연스러운 스크롤 동작 수행
                 try:
                     # 전체 페이지 높이 확인
                     total_height = self.driver.execute_script("return document.body.scrollHeight")
@@ -297,14 +343,30 @@ class CoupangProductFinder:
                     # 스크롤 위치 계산
                     current_position = 0
                     while current_position < total_height:
-                        scroll_amount = random.randint(200, 400)
-                        current_position += scroll_amount
-                        scroll_positions.append(min(current_position, total_height))
+                        if scroll_speed == 'H':  # 사람 속도
+                            # 더 작은 단위로 스크롤하고 랜덤한 일시 정지 추가
+                            scroll_amount = random.randint(100, 300)
+                            current_position += scroll_amount
+                            scroll_positions.append(min(current_position, total_height))
+                        else:  # 기본 속도
+                            scroll_amount = random.randint(300, 500)
+                            current_position += scroll_amount
+                            scroll_positions.append(min(current_position, total_height))
                     
                     # 자연스러운 스크롤 수행
                     for position in scroll_positions:
-                        self.driver.execute_script(f"window.scrollTo({{top: {position}, behavior: 'smooth'}})")
-                        time.sleep(random.uniform(0.5, 1.5))
+                        if scroll_speed == 'H':
+                            # 사람 속도: 부드러운 스크롤과 랜덤한 일시 정지
+                            self.driver.execute_script(f"window.scrollTo({{top: {position}, behavior: 'smooth'}})")
+                            time.sleep(random.uniform(0.8, 2.0))  # 더 긴 대기 시간
+                            
+                            # 가��� 잠깐 멈춤 (20% 확률)
+                            if random.random() < 0.2:
+                                time.sleep(random.uniform(0.5, 1.5))
+                        else:
+                            # 기본 속도
+                            self.driver.execute_script(f"window.scrollTo(0, {position})")
+                            time.sleep(random.uniform(0.3, 0.7))
                     
                     # 리뷰 또는 상품평 섹션 찾기
                     review_found = False
@@ -349,7 +411,7 @@ class CoupangProductFinder:
                     return True
                     
                 except Exception as scroll_error:
-                    self.logger.error(f"스크롤 중 오류: {str(scroll_error)}")
+                    self.logger.error(f"��크롤 중 오류: {str(scroll_error)}")
                     return True  # 스크롤 실패해도 상품 ID가 일치하면 성공으로 간주
             
             self.logger.warning("상세 페이지 확인 실패")

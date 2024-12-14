@@ -142,14 +142,21 @@ def process_product(keyword, target_product_id, click_count, ad_click_count, sho
     if location_mode in ['location_mobile_off', 'location_web_on']:
         if not toggle_location_service(location_mode):
             print("위치 서비스 설정 실패")
-            return
+            return 0, 0
 
-    total_clicks = click_count + ad_click_count
+    total_clicks = click_count + (ad_click_count if ad_click_count > 0 else 0)
+    if total_clicks == 0:
+        print("클릭할 항목이 없습니다.")
+        return 0, 0
     
     detail_success = 0  # 일반 상품 상세 페이지 성공 횟수
     detail_ad_success = 0  # 광고 상품 상세 페이지 성공 횟수
     
     for click_num in range(total_clicks):
+        # 광고 클릭이 0이면 광고 클릭 시도 건너뛰기
+        if ad_click_count == 0 and click_num >= click_count:
+            continue
+            
         print(f"\n--- 클릭 {click_num + 1}/{total_clicks} 시작 ---")
         
         search_automation = CoupangSearchAutomation()
@@ -186,9 +193,9 @@ def process_product(keyword, target_product_id, click_count, ad_click_count, sho
                 
         finally:
             search_automation.close()
-            time.sleep(3)  # 다음 시도 전 대기
+            time.sleep(3)
             
-        # 모든 클릭 끝난 후 IP 변경 체크
+        # 모든 클릭이 끝난 후 IP 변경 체크
         if should_change_ip == 'change_ip_ok' and click_num == total_clicks - 1:
             print("\n=== 모든 클릭 완료, IP 변경 시도 ===")
             if not change_ip():
@@ -200,13 +207,11 @@ def update_excel_result(df, index, result, result_click, result_ad_click, detail
     """엑셀 파일에 결과 업데이트"""
     try:
         df.at[index, 'result'] = result
-        df.at[index, 'result_click'] = result_click
-        df.at[index, 'result_ad_click'] = result_ad_click
-        df.at[index, 'detail_page'] = detail_success
-        df.at[index, 'detail_ad_page'] = detail_ad_success
+        df.at[index, 'result_click'] = detail_success  # 성공한 일반 클릭 횟수
+        df.at[index, 'result_ad_click'] = detail_ad_success  # 성공한 광고 클릭 횟수
         df.to_excel('coupang_click.xlsx', index=False)
-        print(f"결과 저장 완료: result={result}, result_click={result_click}, result_ad_click={result_ad_click}")
-        print(f"상세 페이지 성공: 일반={detail_success}, 광고={detail_ad_success}")
+        print(f"결과 저장 완료: result={result}")
+        print(f"성공한 클릭 횟수: 일반={detail_success}, 광고={detail_ad_success}")
         return True
     except Exception as e:
         print(f"결과 저장 중 오류 발생: {str(e)}")
@@ -267,7 +272,7 @@ def select_initial_location_mode():
                 print(f"\n선택된 모드: {selected_mode}")
                 if toggle_location_service(selected_mode):
                     print("\n위치 설정이 완료되었습니다.")
-                    print("1분�� 대기합니다. 대기 중 다음 작업을 선택할 수 있습니다:")
+                    print("1분 대기합니다. 대기 중 다음 작업을 선택할 수 있습니다:")
                     print("1. 대기 시간 스킵")
                     print("2. 위치 설정 다시하기")
                     print("3. 그대로 대기")
@@ -312,8 +317,22 @@ def load_saved_location_state():
     except:
         return None
 
+def load_scroll_speed():
+    """엑셀에서 스크롤 속도 설정 읽기"""
+    try:
+        df = pd.read_excel('coupang_click.xlsx')
+        scroll_setting = df[df['number'] == 0]['scroll'].iloc[0]
+        return str(scroll_setting).strip().upper()
+    except Exception as e:
+        print(f"스크롤 설정 읽기 실패: {str(e)}")
+        return 'M'  # 기본값은 중간 속도
+
 def main():
     try:
+        # 스크롤 속도 설정 읽기
+        scroll_speed = load_scroll_speed()
+        print(f"\n=== 스크롤 속도 설정: {'사람 속도' if scroll_speed == 'H' else '기본 속도'} ===")
+        
         # 저장된 위치 상태 확인
         saved_state = load_saved_location_state()
         if saved_state:
@@ -352,10 +371,9 @@ def main():
         # 데이터 처리
         df = df.sort_values('number')
         for index, row in df.iterrows():
-            if row['number'] == 0:  # 초기 설정 행은 건너뛰기
+            if row['number'] == 0:
                 continue
                 
-            print(f"\n=== 처리 중인 항목 {row['number']} ===")
             try:
                 # 상품 처리 및 결과 받기
                 detail_success, detail_ad_success = process_product(
@@ -368,12 +386,10 @@ def main():
                 )
                 
                 # 결과 저장
-                result = 'ok' if (detail_success > 0 or detail_ad_success > 0) else 'nok'
-                result_click = 'ok' if detail_success > 0 else 'nok'
-                result_ad_click = 'ok' if detail_ad_success > 0 else 'nok'
+                result = 'ok' if (detail_success > 0 or (detail_ad_success > 0 and int(row['ad click']) > 0)) else 'nok'
                 
                 update_excel_result(
-                    df, index, result, result_click, result_ad_click,
+                    df, index, result, 'ok', 'ok',
                     detail_success=detail_success,
                     detail_ad_success=detail_ad_success
                 )
