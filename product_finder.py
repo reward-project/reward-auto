@@ -42,8 +42,8 @@ class CoupangProductFinder:
         except:
             return None, None
 
-    def find_product_by_id(self, target_product_id, is_ad=False):
-        """상품 ID로 상품 찾기"""
+    def find_product_by_id(self, target_product_id, product_name=None, is_ad=False):
+        """상품 ID 또는 제품명으로 상품 찾기"""
         try:
             # 스크롤 속도 설정 읽기
             try:
@@ -56,7 +56,11 @@ class CoupangProductFinder:
             
             # target_product_id가 float인 경우 문자열로 변환
             target_product_id = str(target_product_id).split('.')[0]  # float 부분 제거
-            self.logger.info(f"상품 검색 시작 - ID: {target_product_id} (광고: {is_ad})")
+            self.logger.info(f"상품 검색 시작 - ID: {target_product_id}, 제품명: {product_name}, 광고: {is_ad}")
+            
+            # 상품명이 있으면 로그 출력
+            if product_name:
+                self.logger.info(f"검색할 상품명: {product_name}")
             
             while True:  # 모든 페이지 검색
                 # 팝업 처리
@@ -89,6 +93,43 @@ class CoupangProductFinder:
                 # 광고/일반 상품 구분 처리
                 for container in product_containers:
                     try:
+                        # 제품명 확인 (있는 경우)
+                        if product_name:
+                            try:
+                                # 여러 선택자로 상품명 찾기 시도
+                                title_selectors = [
+                                    '.name',
+                                    'div.name',
+                                    'div.product-name',
+                                    'a[href*="/products/"] .name'
+                                ]
+                                
+                                product_title = None
+                                for selector in title_selectors:
+                                    try:
+                                        title_element = container.find_element(By.CSS_SELECTOR, selector)
+                                        product_title = title_element.text.strip()
+                                        if product_title:
+                                            break
+                                    except:
+                                        continue
+                                
+                                if not product_title:
+                                    continue
+                                    
+                                self.logger.info(f"상품명 비교: 검색={product_name}, 발견={product_title}")
+                                
+                                # 상품명 비교 (대소문자 구분 없이, 부분 일치)
+                                if product_name.lower() in product_title.lower():
+                                    self.logger.info(f"상품명 일치: {product_title}")
+                                else:
+                                    self.logger.info(f"상품명 불일치. 다음 상품 확인")
+                                    continue
+                                    
+                            except Exception as title_error:
+                                self.logger.error(f"상품명 확인 중 오류: {str(title_error)}")
+                                continue
+                        
                         # 링크 찾기
                         links = container.find_elements(By.CSS_SELECTOR, 'a[href*="/products/"]')
                         for link in links:
@@ -99,8 +140,8 @@ class CoupangProductFinder:
                             is_ad_product = 'search-product-ad' in container.get_attribute('class')
                             self.logger.info(f"광고 상품 여부: {is_ad_product}")
                             
-                            # 타겟 상품 ID가 URL에 포함되어 있고, 광고 여부가 일치하는 경우
-                            if target_product_id in product_url and is_ad == is_ad_product:
+                            # ID 또는 제품명이 일치하고, 광고 여부가 일치하는 경우
+                            if ((target_product_id in product_url) and is_ad == is_ad_product):
                                 self.logger.info(f"목표 상품 발견! URL: {product_url}")
                                 
                                 try:
@@ -360,7 +401,7 @@ class CoupangProductFinder:
                             self.driver.execute_script(f"window.scrollTo({{top: {position}, behavior: 'smooth'}})")
                             time.sleep(random.uniform(0.8, 2.0))  # 더 긴 대기 시간
                             
-                            # 가��� 잠깐 멈춤 (20% 확률)
+                            # 가끔 잠깐 멈춤 (20% 확률)
                             if random.random() < 0.2:
                                 time.sleep(random.uniform(0.5, 1.5))
                         else:
@@ -411,12 +452,12 @@ class CoupangProductFinder:
                     return True
                     
                 except Exception as scroll_error:
-                    self.logger.error(f"��크롤 중 오류: {str(scroll_error)}")
+                    self.logger.error(f"스크롤 중 오류: {str(scroll_error)}")
                     return True  # 스크롤 실패해도 상품 ID가 일치하면 성공으로 간주
             
             self.logger.warning("상세 페이지 확인 실패")
             return False
             
         except Exception as e:
-            self.logger.error(f"상세 페이지 확인 중 오류: {str(e)}")
+            self.logger.error(f"상��� 페이지 확인 중 오류: {str(e)}")
             return False

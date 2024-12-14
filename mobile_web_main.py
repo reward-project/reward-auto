@@ -129,11 +129,12 @@ def toggle_location_service(mode):
         print(f"위치 서비스 설정 중 오류: {str(e)}")
         return False
 
-def process_product(keyword, target_product_id, click_count, ad_click_count, should_change_ip, location_mode):
+def process_product(keyword, target_product_id, product_name, click_count, ad_click_count, should_change_ip, location_mode):
     """개별 상품 처리"""
     print(f"\n=== 상품 처리 시작 ===")
     print(f"키워드: {keyword}")
     print(f"상품 ID: {target_product_id}")
+    print(f"제품명: {product_name}")
     print(f"일반 클릭 횟수: {click_count}")
     print(f"광고 클릭 횟수: {ad_click_count}")
     print(f"위치 서비스 모드: {location_mode}")
@@ -178,8 +179,8 @@ def process_product(keyword, target_product_id, click_count, ad_click_count, sho
                 is_ad_click = click_num >= click_count
                 print(f"현재 클릭 유형: {'광고' if is_ad_click else '일반'} 상품")
                 
-                if product_finder.find_product_by_id(target_product_id, is_ad=is_ad_click):
-                    print(f"상품을 찾아 클릭했습니다! (Product ID: {target_product_id})")
+                if product_finder.find_product_by_id(target_product_id, product_name, is_ad=is_ad_click):
+                    print(f"상품을 찾아 클릭했습니다! (Product ID: {target_product_id}, 제품명: {product_name})")
                     # 성공 횟수 증가
                     if is_ad_click:
                         detail_ad_success += 1
@@ -379,6 +380,7 @@ def main():
                 detail_success, detail_ad_success = process_product(
                     keyword=str(row['keyword']),
                     target_product_id=str(row['target_product_id']),
+                    product_name=str(row.get('product_name', '')),  # product_name 컬럼이 없으면 빈 문자열
                     click_count=int(row['click']),
                     ad_click_count=int(row['ad click']),
                     should_change_ip=str(row['change_ip']),
