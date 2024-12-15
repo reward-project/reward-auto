@@ -279,7 +279,7 @@ class CoupangProductFinder:
     def check_detail_page(self, target_product_id):
         """상품 상세 페이지 확인"""
         try:
-            time.sleep(3)  # 페이지 로딩 대기
+            time.sleep(2)  # 페이지 로딩 대기
             
             # 현재 URL에서 상품 ID 확인
             current_url = self.driver.current_url
@@ -287,64 +287,14 @@ class CoupangProductFinder:
             
             # 상품 ID 확인
             if target_product_id in current_url:
-                # 자연스러운 스크롤 동작 수행
                 try:
                     # 전체 페이지 높이 확인
                     total_height = self.driver.execute_script("return document.body.scrollHeight")
-                    window_height = self.driver.execute_script("return window.innerHeight")
-                    scroll_positions = []
                     
-                    # 스크롤 위치 계산
-                    current_position = 0
-                    while current_position < total_height:
-                        scroll_amount = random.randint(200, 400)
-                        current_position += scroll_amount
-                        scroll_positions.append(min(current_position, total_height))
-                    
-                    # 자연스러운 스크롤 수행
-                    for position in scroll_positions:
-                        self.driver.execute_script(f"window.scrollTo({{top: {position}, behavior: 'smooth'}})")
-                        time.sleep(random.uniform(0.5, 1.5))
-                    
-                    # 리뷰 또는 상품평 섹션 찾기
-                    review_found = False
-                    review_selectors = [
-                        'div.sdp-review__article',  # 리뷰
-                        'div.product-review',       # 상품평
-                        'div.js_reviewArticleContainer', # 상품평 컨테이너
-                        '#btfTab > ul.product-tab-list > li.product-review-tab' # 상품평 탭
-                    ]
-                    
-                    for selector in review_selectors:
-                        try:
-                            review_element = self.driver.find_element(By.CSS_SELECTOR, selector)
-                            self.logger.info(f"리뷰/상품평 섹션 발견: {selector}")
-                            
-                            # 해당 섹션으로 스크롤
-                            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", review_element)
-                            time.sleep(random.uniform(1, 2))
-                            
-                            # 상품평 탭인 경우 클릭
-                            if 'product-review-tab' in selector:
-                                review_element.click()
-                                time.sleep(random.uniform(1, 2))
-                            
-                            review_found = True
-                            break
-                        except:
-                            continue
-                    
-                    if not review_found:
-                        self.logger.info("리뷰/상품평 섹션 없음")
-                    
-                    # 가끔 위로 살짝 스크롤
-                    if random.random() < 0.3:
-                        up_scroll = random.randint(100, 300)
-                        self.driver.execute_script(f"window.scrollBy({{top: -{up_scroll}, behavior: 'smooth'}})")
-                        time.sleep(random.uniform(0.5, 1))
-                    
-                    # 상세 페이지 체류 시간
-                    time.sleep(random.uniform(3, 5))
+                    # 한 번에 10% 지점까지 부드럽게 스크롤
+                    target_position = total_height * 0.1  # 10% 지점으로 수정
+                    self.driver.execute_script(f"window.scrollTo({{top: {target_position}, behavior: 'smooth'}})")
+                    time.sleep(1.5)  # 스크롤 후 대기
                     
                     return True
                     

@@ -44,19 +44,30 @@ def toggle_cellular_data():
         print("네트워크 재연결 및 새 IP 할당을 위해 60초 대기 중...")
         time.sleep(60)
         
-        # 연결 상태 확인
+        # 연결 상태 확인 (2회만 시도)
         print("네트워크 연결 확인 중...")
-        for _ in range(6):
+        for _ in range(2):
             data_enabled = os.popen("adb shell settings get global mobile_data").read().strip()
             if data_enabled == "1":
                 test_result = os.popen('adb shell ping -c 1 8.8.8.8').read()
                 if "1 packets transmitted" in test_result:
                     print("셀룰러 데이터 연결 완료")
                     time.sleep(5)
-                    return True
+                    
+                    # IP 변경 확인
+                    new_ip = get_smartphone_ip()
+                    if "찾을 수 없습니다" not in new_ip and "오류" not in new_ip:
+                        print(f"새로운 IP 확인: {new_ip}")
+                        return True
             print("연결 대기 중...")
             time.sleep(5)
         
+        # 마지막으로 한 번 더 IP 확인
+        final_ip = get_smartphone_ip()
+        if "찾을 수 없습니다" not in final_ip and "오류" not in final_ip:
+            print(f"최종 IP 확인: {final_ip}")
+            return True
+            
         print("셀룰러 데이터 연결 실패")
         return False
             
@@ -96,7 +107,7 @@ def toggle_location_service(mode):
             print("모바일 및 웹 위치 서비스 모두 끄기...")
             os.system("adb shell settings put secure location_mode 0")
             time.sleep(2)
-            print("모든 위치 서비스가 비활성화되었습니다.")
+            print("��든 위치 서비스가 비활성화되었습니다.")
             return True
         elif mode == 'test_location_mode_mobileoff':
             print("모바일 위치 서비스 끄기...")
@@ -267,7 +278,7 @@ def select_initial_location_mode():
                 print(f"\n선택된 모드: {selected_mode}")
                 if toggle_location_service(selected_mode):
                     print("\n위치 설정이 완료되었습니다.")
-                    print("1분�� 대기합니다. 대기 중 다음 작업을 선택할 수 있습니다:")
+                    print("1분 대기합니다. 대기 중 다음 작업을 선택할 수 있습니다:")
                     print("1. 대기 시간 스킵")
                     print("2. 위치 설정 다시하기")
                     print("3. 그대로 대기")
@@ -312,8 +323,54 @@ def load_saved_location_state():
     except:
         return None
 
+def save_last_ip(ip):
+    """마지막 IP 주소 저장"""
+    try:
+        with open('last_ip.txt', 'w') as f:
+            f.write(ip)
+    except Exception as e:
+        print(f"IP 저장 중 오류: {e}")
+
+def get_last_ip():
+    """저장된 마지막 IP 주소 읽기"""
+    try:
+        if os.path.exists('last_ip.txt'):
+            with open('last_ip.txt', 'r') as f:
+                return f.read().strip()
+    except Exception as e:
+        print(f"저장된 IP 읽기 오류: {e}")
+    return None
+
 def main():
     try:
+        # 초기 IP 확인
+        current_ip = get_smartphone_ip()
+        print(f"\n=== 프로그램 시작 ===")
+        print(f"현재 IP: {current_ip}")
+        
+        # 이전 IP와 비교
+        last_ip = get_last_ip()
+        if last_ip and last_ip == current_ip:
+            print("이전 실행과 동일한 IP가 감지되었습니다.")
+            print("IP 변경을 시도합니다...")
+            
+            if not change_ip():
+                print("IP 변경 실패. 프로그램을 종료합니다.")
+                return
+            
+            # 변경된 IP 확인
+            new_ip = get_smartphone_ip()
+            print(f"변경된 IP: {new_ip}")
+            
+            if new_ip == current_ip:
+                print("IP 변경 실패. 프로그램을 종료합니다.")
+                return
+            
+            current_ip = new_ip
+        
+        # 현재 IP 저장
+        save_last_ip(current_ip)
+        
         # 저장된 위치 상태 확인
         saved_state = load_saved_location_state()
         if saved_state:
