@@ -7,8 +7,6 @@ from bs4 import BeautifulSoup
 import time
 import random
 import urllib.parse
-import pandas as pd
-from datetime import datetime
 
 def smooth_scroll(browser):
     """사람처럼 천천히 스크롤하는 함수"""
@@ -41,7 +39,6 @@ def analyze_page(soup, page, product_id):
     """페이지 내용을 분석하여 상품 찾기"""
     products = soup.select('.search-product')
     non_ad_rank = 0
-    ad_rank = 0
     ad_count = 0
     
     for product in products:
@@ -50,9 +47,10 @@ def analyze_page(soup, page, product_id):
         
         if is_ad:
             ad_count += 1
-            ad_rank += 1
-        else:
-            non_ad_rank += 1
+            print(f"광고 상품 발견: {ad_count}번째 광고")
+            continue
+        
+        non_ad_rank += 1
         
         # 상품 정보 추출
         product_link = product.select_one('a.search-product-link')
@@ -71,31 +69,15 @@ def analyze_page(soup, page, product_id):
         if product_id == current_id:
             print("\n[상품 발견!]")
             print(f"페이지: {page}")
-            
-            # 광고 상품인 경우
-            if is_ad:
-                print(f"광고 순위: {ad_rank}")
-                rank_type = "ad"
-                rank_value = ad_rank
-            else:
-                print(f"일반 순위: {non_ad_rank}")
-                rank_type = "normal"
-                rank_value = non_ad_rank
-                
+            print(f"순위: {non_ad_rank} (광고 제외)")
             if ad_count > 0:
                 print(f"광고 상품 수: {ad_count}개")
             print(f"상품명: {current_name}")
             print(f"상품 ID: {current_id}")
             print(f"URL: https://www.coupang.com{current_url}")
-            
-            # 전체 페이지 순위 계산 (36개 기준)
-            page_rank = ((page - 1) * 36) + rank_value
-            
             return {
                 'page': page,
-                'rank': rank_value,
-                'rank_type': rank_type,
-                'page_rank': page_rank,
+                'rank': non_ad_rank,
                 'ad_count': ad_count,
                 'name': current_name,
                 'id': current_id,
@@ -210,57 +192,13 @@ def search_product(keyword, product_id):
 
 def main():
     try:
-        # coupang_rank.xlsx 파일 읽기
-        rank_df = pd.read_excel('coupang_rank.xlsx')
-        print("\n=== coupang_rank.xlsx 파일 읽기 성공 ===")
+        keyword = input("검색할 키워드를 입력하세요: ")
+        product_id = input("상품 ID를 입력하세요: ")
         
-        # number 순서대로 정렬
-        rank_df = rank_df.sort_values('number')
+        result = search_product(keyword, product_id)
         
-        # 각 행에 대해 검색 수행
-        for index, row in rank_df.iterrows():
-            keyword = str(row['keyword'])
-            product_id = str(row['product_id'])
-            
-            print(f"\n=== 검색 {row['number']} 시작 ===")
-            print(f"키워드: {keyword}")
-            print(f"상품 ID: {product_id}")
-            
-            # 검색 수행
-            result = search_product(keyword, product_id)
-            
-            if result:
-                # 결과 업데이트
-                rank_df.loc[index, 'date'] = datetime.now().strftime('%Y-%m-%d')
-                rank_df.loc[index, 'time'] = datetime.now().strftime('%H:%M:%S')
-                rank_df.loc[index, 'page'] = result['page']
-                
-                # 광고/일반 순위 구분
-                if result['rank_type'] == 'ad':
-                    rank_df.loc[index, 'rank'] = None
-                    rank_df.loc[index, 'ad'] = 'O'  # 광고인 경우 'O'로 표시
-                else:
-                    rank_df.loc[index, 'rank'] = float(result['rank'])
-                    rank_df.loc[index, 'ad'] = None
-                
-                # 전체 페이지 순위 저장
-                rank_df.loc[index, 'page_rank'] = float(result['page_rank'])
-                
-                # 중간 결과 저장
-                rank_df.to_excel('coupang_rank.xlsx', index=False)
-                print("\n검색이 완료되었습니다.")
-                print(f"시간: {rank_df.loc[index, 'time']}")
-                print(f"페이지: {result['page']}")
-                if result['rank_type'] == 'ad':
-                    print(f"광고 상품 (순위: {result['rank']})")
-                else:
-                    print(f"일반 순위: {result['rank']}")
-                print(f"전체 페이지 순위: {result['page_rank']}")
-                
-                # 다음 검색 전 대기
-                time.sleep(3)
-        
-        print("\n모든 검색이 완료되었습니다.")
+        if result:
+            print("\n검색이 완료되었습니다.")
             
     except Exception as e:
         print(f"프로그램 실행 중 오류 발생: {str(e)}")
