@@ -36,13 +36,13 @@ def toggle_cellular_data():
     try:
         print("셀룰러 데이터 끄기...")
         os.system("adb shell svc data disable")
-        print("IP 변경을 위해 30초 대기 중...")
-        time.sleep(30)
+        print("IP 변경을 위해 15초 대기 중...")
+        time.sleep(15)
         
         print("셀룰러 데이터 켜기...")
         os.system("adb shell svc data enable")
-        print("네트워크 재연결 및 새 IP 할당을 위해 60초 대기 중...")
-        time.sleep(60)
+        print("네트워크 재연결 및 새 IP 할당을 위해 30초 대기 중...")
+        time.sleep(30)
         
         # 연결 상태 확인 (2회만 시도)
         print("네트워크 연결 확인 중...")
@@ -52,7 +52,7 @@ def toggle_cellular_data():
                 test_result = os.popen('adb shell ping -c 1 8.8.8.8').read()
                 if "1 packets transmitted" in test_result:
                     print("셀룰러 데이터 연결 완료")
-                    time.sleep(5)
+                    time.sleep(3)
                     
                     # IP 변경 확인
                     new_ip = get_smartphone_ip()
@@ -60,7 +60,7 @@ def toggle_cellular_data():
                         print(f"새로운 IP 확인: {new_ip}")
                         return True
             print("연결 대기 중...")
-            time.sleep(5)
+            time.sleep(3)
         
         # 마지막으로 한 번 더 IP 확인
         final_ip = get_smartphone_ip()
@@ -107,7 +107,7 @@ def toggle_location_service(mode):
             print("모바일 및 웹 위치 서비스 모두 끄기...")
             os.system("adb shell settings put secure location_mode 0")
             time.sleep(2)
-            print("��든 위치 서비스가 비활성화되었습니다.")
+            print("모든 위치 서비스가 비활성화되었습니다.")
             return True
         elif mode == 'test_location_mode_mobileoff':
             print("모바일 위치 서비스 끄기...")
