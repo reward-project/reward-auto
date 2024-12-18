@@ -10,6 +10,9 @@ import urllib.parse
 import pandas as pd
 from datetime import datetime
 
+# -*- coding: utf-8 -*-
+print("안녕하세요")  # Non-ASCII 문자 (한글)
+
 def smooth_scroll(browser):
     """사람처럼 천천히 스크롤하는 함수"""
     # 현재 화면 높이 가져오기
